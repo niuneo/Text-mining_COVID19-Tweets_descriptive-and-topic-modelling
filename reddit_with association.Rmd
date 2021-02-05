@@ -1,0 +1,1042 @@
+---
+title: "Text Mining about Tweets in Covid19"
+author: "By Hongxing Niu"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+vignette: |
+  %\VignetteIndexEntry{Data quality diagnosis} %\VignetteEngine{knitr::rmarkdown} %\VignetteEncoding{UTF-8}
+---
+
+```{r global options, include = FALSE}
+#knitr::opts_chunk$set(echo=FALSE, include = FALSE, warning=FALSE, message = FALSE)
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+                      echo=FALSE, warning=FALSE, message=FALSE)
+```
+
+
+## Preface
+After you have acquired the data, you should do the Data Quality Assessement (DQA) before to move forward to Advanced Analytics.
+
+###The structure of this kernel is as follows
+* **Preface**
+* **Load data**
+* **Exploratory Data Analysis**
+* **Automated reporting**
+
+### Purpose and structure of this kernel
+
+* **Analysis of the COVID 19 impact on the BVN sales of EU ** [link](https://orbit-ucb.my.salesforce.com)
+
+    + **1.Visualization**
+      a. **1.1. Distribution of raw data**
+      *Distribution analysis entails counting all the records associated with  percentages compare to each other*
+      b. **1.2. Outlier detection**
+      *An outlier is a value that lies in the tail of the statistical distribution of a set of data values(usually +-2 SD)*
+    + **2.Timeliness/availability**
+    *The degree to which data represent reality from the required point in time*
+
+  
+* **Performs a data diagnosis and automatically generates a report.**
+
+This document introduces **Data Quality Assessment** methods. You will learn how 
+
+### Supported data structures
+Data diagnosis supports the following data structures.
+
+* data frame : data.frame class.
+* data table : tbl_df class.
+* **table of DBMS** : table of the DBMS through tbl_dbi.
+  + **Using dplyr backend for any DBI-compatible database.**
+  
+
+## Load libraries
+
+```{r environment, echo = FALSE, message = FALSE, warning=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "")
+options(tibble.print_min = 4L, tibble.print_max = 4L)
+
+library(dlookr)
+library(dplyr)
+library(ggplot2)  #Create graphics and charts
+library(knitr)    #Dynamic Report generation in R
+###### added
+library(data.table)
+library(stringr)
+library(tidyr)
+library(leaflet)
+library(lubridate)
+library(scales)
+library(ggthemes)
+library(gridExtra)
+library(ggmap)
+library(readxl)
+library(tidyverse)
+library(plotly)
+library(tidyverse)
+library(lubridate) #Lubridate is an R package that makes it easier to work with dates and times.
+library(tidyr)
+
+library(dplyr)
+library(readr)
+library(stringr)
+library(forcats)
+library(purrr)
+library(tibble)
+```
+
+
+```{r}
+install.packages("BiocManager")
+BiocManager::install("Rgraphviz")
+
+```
+
+```{r}
+## Google's Terms of Service: https://cloud.google.com/maps-platform/terms/
+## Please cite ggmap if you use it! See citation("ggmap") for details.
+
+```
+
+```{r}
+install.packages("RCurl")
+install.packages("rjson")
+install.packages("ndjson")
+install.packages("purrr")
+
+```
+
+
+## 0. Load Data 
+
+```{r import_data, warning=FALSE}
+
+
+# setting working directory
+setwd('C:\\Users\\neo\\Machine learning Project 2020\\Social listening_innovation lab\\Topic modelling\\With association mining')
+
+Sys.setlocale(,"CHS")  
+
+
+f_o <- read.csv("covid19_tweets.csv", stringsAsFactors = FALSE)
+
+
+print("Dimension of data:")
+dim(f_o)
+
+#complete.cases(data) will return a logical vector indicating which rows have no missing values. Then use the vector to get only rows that are complete using df_loc_age_spec_month[,].
+f_o2 <- f_o[complete.cases(f_o), ]
+dim(f_o2)
+str(f_o2)
+#mutate function is from dplyr package. It is used to edit or add new columns to dataframe. Here Description column is being converted to factor column. as.factor converts column to factor column. %>% is an operator with which you may pipe values to another function or expression
+# retail %>% 
+#   mutate(Description = as.factor(Description))
+
+
+#get a glimpse of your data
+glimpse(f_o)
+summary(f_o)
+head(f_o)
+
+df <- sample_n(f_o, 5000, replace = FALSE)
+dim(df)
+
+```
+
+
+##1.Tweets per Minute
+
+* First, 
+
+```{r data clearning up}
+
+df %>%
+  mutate(created_at = substr(user_created, 12, 16)) %>% 
+  dplyr::count(user_created) %>% 
+  ggplot(aes(x=as.numeric(as.factor(user_created)), y=n, group=1)) +
+  geom_line(size=1, show.legend=FALSE) +
+  labs(x='UCT Time', y='Number of Tweets') +
+  theme_update() +scale_x_time()
+
+```
+
+##2.Geographic Information
+
+* First, 
+
+```{r data clearning up}
+
+# how many locations are represented
+length(unique(df$user_location))
+
+```
+
+```{r}
+df %>%
+ ggplot(aes(user_location)) +
+ geom_bar() + coord_flip() +
+    labs(x = "Count",
+     y = "Location",
+     title = "Twitter users - unique locations ")
+```
+
+```{r}
+
+df %>%
+  dplyr::count(user_location, sort = TRUE) %>%
+  mutate(location = reorder(user_location, n)) %>%
+  top_n(20) %>%
+  ggplot(aes(x = location, y = n)) +
+  geom_col() +
+  coord_flip() +
+      labs(x = "Count",
+      y = "Location",
+      title = "Where Twitter users are from - unique locations ")
+
+```
+
+```{r}
+# Delete rwos with blank values in user_location column
+t <- df[!(is.na(df$user_location) | df$user_location==""), ]
+view(t)
+
+```
+
+```{r}
+t %>%
+  dplyr::count(user_location, sort = TRUE) %>%
+  mutate(location = reorder(user_location,n)) %>%
+  top_n(20) %>%
+  ggplot(aes(x = location,y = n)) +
+  geom_col() +
+  coord_flip() +
+      labs(x = "Location",
+      y = "Count",
+      title = "Twitter users - unique locations ")
+
+```
+
+```{r}
+## Selecting by location
+```
+
+
+##3.Most frequent languages
+
+* First, 
+
+```{r data clearning up}
+
+df %>%
+  dplyr::count(lang) %>%
+  arrange(desc(n)) %>%
+  head(n=10) %>%
+  ggplot(aes(x=reorder(lang, -n), y=n)) +
+  geom_bar(stat="identity", fill="lightcyan", colour="black") +
+  labs(x="Language", y="Frequency") + 
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) 
+
+```
+
+```{r}
+  # scale_x_discrete(labels=c("English","Spanish", "Undefined", "German","Hindi", "Turkish","Tagalog","French","Indonesian","NA"))
+
+```
+
+
+
+##3.Characters and words
+
+* First, 
+
+```{r data clearning up}
+
+# Histogram
+df %>%
+  filter(lang=="en" | lang=="es") %>%
+  ggplot(aes(x=nchar(text), fill=lang)) +
+  geom_histogram(bins=10, show.legend=FALSE) +
+  facet_wrap(~lang) +
+  theme_bw() +
+  labs(x="Characters", y="Frequency") 
+
+```
+
+
+##3.User attributes
+
+We are going to analize the following user attributes:
+
+friends_count. The number of users this account is following.
+
+followers_count. The number of followers this user currently has.
+
+favourites_count. The number of Tweets this user has liked in the account's lifetime.
+
+statuses_count. The number of Tweets (including retweets) issued by the user.
+
+```{r data clearning up}
+
+df %>%
+  # User attributes
+  select(user_friends, user_followers,
+         user_favourites, user_verified) %>%
+  # Variables as values of a new column (facet_wrap)
+  gather(Attribute, Num, 1:4) %>%
+  mutate_at(vars(Attribute), factor) %>%
+  ggplot(aes(x=Num, fill=Attribute)) +
+  geom_histogram(bins=20, show.legend=FALSE) +
+  xlim(c(0,2000)) +
+  facet_wrap(~Attribute) +
+  theme_bw() +
+  labs(y="Frequency") +
+  theme(axis.title.x=element_blank())
+
+```
+
+
+
+```{r}
+# Correlation between number of followers and number of friends
+ggplot(data=df, aes(x=user_followers, y=user_friends)) +
+  geom_point(alpha=0.1) + 
+  xlim(0, quantile(df$followers, 0.95, na.rm=TRUE)) +
+  ylim(0, quantile(df$friends, 0.95, na.rm=TRUE)) + 
+  geom_smooth(method="lm", color="red") +
+  theme_bw() +
+  labs(x="Number of followers", y="Number of friends") 
+
+```
+
+```{r}
+## `geom_smooth()` using formula 'y ~ x'
+```
+
+
+##4.WordCloud
+
+```{r data clearning up}
+
+# view(df$user_description)
+#Create a vector containing only the text
+description <- df$user_description
+
+```
+
+
+```{r}
+library(tm)
+library(tmap)
+# Create a corpus  
+docs <- Corpus(VectorSource(description))
+```
+
+```{r}
+# Clean the text data
+docs <- docs %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace)
+
+```
+
+```{r}
+docs <- tm_map(docs, content_transformer(tolower))
+```
+
+```{r}
+docs <- tm_map(docs, removeWords, stopwords("english"))
+```
+
+```{r}
+# Create a document-term-matrix
+dtm <- TermDocumentMatrix(docs) 
+matrix <- as.matrix(dtm) 
+words <- sort(rowSums(matrix),decreasing=TRUE) 
+description_df <- data.frame(word = names(words),freq=words)
+
+```
+
+
+```{r}
+library(wordcloud)
+# Generate a classic wordcloud
+set.seed(1234) # for reproducibility 
+wordcloud(words = description_df$word, freq = description_df$freq, min.freq = 1, max.words=200, random.order=FALSE, rot.per=0.35, colors=brewer.pal(8, "Dark2"))
+```
+
+
+
+## Wordcloud2
+
+
+```{r}
+##https://stackoverflow.com/questions/51397728/invalid-utf-8-error-when-saving-leaflet-widget-in-r
+
+library(wordcloud2)
+set.seed(2018)
+df <- aggregate(
+    freq ~ word,
+    data = data.frame(
+        word = description_df$word,
+        freq = description_df$freq),
+    FUN = sum)
+
+wordcloud2(df)
+
+
+```
+
+
+
+```{r}
+# Build a corpus
+tweet_corpus <- Corpus(VectorSource(df$text))
+```
+
+```{r}
+#inspect a particular document
+writeLines(as.character(tweet_corpus[[30]]))
+```
+
+
+
+##5.Corpus Transformations
+
+```{r data clearning up}
+
+getTransformations()
+
+```
+
+```{r}
+## Warning in tm_map.SimpleCorpus(tweet_corpus, content_transformer(tolower)):
+## transformation drops documents
+# remove punctuation
+tweet_corpus <- tm_map(tweet_corpus, removePunctuation) 
+```
+
+```{r}
+## Warning in tm_map.SimpleCorpus(tweet_corpus, removePunctuation): transformation
+## drops documents
+# remove numbers
+tweet_corpus <- tm_map(tweet_corpus, removeNumbers)
+```
+
+
+```{r}
+## Warning in tm_map.SimpleCorpus(tweet_corpus, removeNumbers): transformation
+## drops documents
+# remove URLs
+removeURL <- function(x) gsub("http[[:alnum:][:punct:]]*", "", x) 
+tweet_corpus <- tm_map(tweet_corpus, content_transformer(removeURL)) 
+```
+
+
+```{r}
+## Warning in tm_map.SimpleCorpus(tweet_corpus, content_transformer(removeURL)):
+## transformation drops documents
+# remove stopwords from corpus
+tweet_corpus <- tm_map(tweet_corpus, removeWords, stopwords('english'))
+```
+
+```{r}
+## Warning in tm_map.SimpleCorpus(tweet_corpus, removeWords, stopwords("english")):
+## transformation drops documents
+# keep a copy of corpus to use later as a dictionary for stem completion
+tweet_corpus_Copy <- tweet_corpus
+```
+
+
+```{r}
+# stem words
+tweet_corpus  <- tm_map(tweet_corpus , stemDocument)
+
+```
+
+```{r}
+## Warning in tm_map.SimpleCorpus(tweet_corpus, stemDocument): transformation drops
+## documents
+# inspect the first 5 documents (tweets) 
+inspect(tweet_corpus[1:5]) 
+```
+
+```{r}
+
+## <<SimpleCorpus>>
+## Metadata:  corpus specific: 1, document level (indexed): 0
+## Content:  documents: 5
+## 
+## [1] end today will move nd place past itali case world friday will pass china case virus countri actual report death correct go will coronavirus fire trump                                                            
+## [2] keep word countri belov android appl cgtn china covid googl itun pandem tumblr us                                                                                                                                  
+## [3] amaz tshirt offer chromatica arab trump minneapoli blacklivesmat gaga yachti trump america usa protest georgefloyd offic china islam love babylon tshirt bts usa covid coronavirus nba nfl father fathersday teespr
+## [4] 're number one trump pursu new guidelin loosen social distanc measur order reopen part economi report us now surpass itali china confirm coronavirus case coronavirusoutbreak                                      
+## [5] new antibodi test accuraci approv use good now dont ship china crap peddl us covid
+
+# stem completion
+# tweet_corpus <- tm_map(tweet_corpus, content_transformer(stemCompletion), dictionary = tweet_corpus_Copy)
+my_corpus <- tm_map(tweet_corpus, content_transformer(gsub), pattern = "harri", replacement = "harry")
+
+```
+
+```{r}
+## Warning in tm_map.SimpleCorpus(tweet_corpus, content_transformer(gsub), :
+## transformation drops documents
+writeLines(as.character(my_corpus[[30]]))
+
+```
+```{r}
+## think qiagen rna extract kit scarc seem bottleneck covid dx us manufactur korea china trivial make monopoli endang nation secur alright global secur rather
+inspect(my_corpus[1:5]) 
+```
+
+```{r}
+## <<SimpleCorpus>>
+## Metadata:  corpus specific: 1, document level (indexed): 0
+## Content:  documents: 5
+## 
+## [1] end today will move nd place past itali case world friday will pass china case virus countri actual report death correct go will coronavirus fire trump                                                            
+## [2] keep word countri belov android appl cgtn china covid googl itun pandem tumblr us                                                                                                                                  
+## [3] amaz tshirt offer chromatica arab trump minneapoli blacklivesmat gaga yachti trump america usa protest georgefloyd offic china islam love babylon tshirt bts usa covid coronavirus nba nfl father fathersday teespr
+## [4] 're number one trump pursu new guidelin loosen social distanc measur order reopen part economi report us now surpass itali china confirm coronavirus case coronavirusoutbreak                                      
+## [5] new antibodi test accuraci approv use good now dont ship china crap peddl us covid
+```
+
+
+## 6.Document Term Matrix
+
+```{r}
+my_corpus2 <- VCorpus(VectorSource(df1$text))
+my_corpus2
+```
+
+```{r}
+dtm1 <- DocumentTermMatrix(my_corpus2)
+
+```
+
+```{r}
+inspect(dtm1)
+```
+
+
+```{r}
+# coerces my_corpus into a Document Term Matrix
+dtm2 <- DocumentTermMatrix(my_corpus)
+```
+
+
+```{r}
+# inspects chapters 1:5, terms 10:17
+inspect(dtm1[1:5, 5:10]) 
+```
+
+```{r}
+dtm2
+```
+
+
+## 7. Word Frequency
+
+```{r}
+# Sum all columns(words) to get frequency
+words_frequency <- colSums(as.matrix(dtm1)) 
+```
+
+```{r}
+# verify that the terms are still equal to dtm_potter
+length(words_frequency) 
+```
+
+```{r}
+# create sort order (descending) for matrix
+ord <- order(words_frequency, decreasing=TRUE)
+
+# get the top 10 words by frequency of appeearance
+words_frequency[head(ord, 10)] %>% 
+  kable()
+```
+
+
+```{r}
+#inspect least frequently occurring terms
+words_frequency[tail(ord, 10)]
+```
+
+
+```{r}
+wf=data.frame(term=names(words_frequency),occurrences=words_frequency)
+
+p <- ggplot(subset(wf, words_frequency>400), aes(term, occurrences))
+p <- p + geom_bar(stat='identity')
+p <- p + theme(axis.text.x=element_text(angle=45, hjust=1))
+p
+```
+
+
+```{r}
+p <- ggplot(subset(wf, words_frequency>200), aes(term, occurrences))
+p <- p + geom_bar(stat='identity') + xlab("Terms") + ylab("Count") +coord_flip()
+p
+```
+
+
+## 8. count frequency of "virus"
+
+```{r}
+tdm <- TermDocumentMatrix(my_corpus2, control = list(wordLengths = c(1, Inf)))
+tdm
+```
+
+```{r}
+# dimnames(tdm)$Terms
+## Freqency words and Association
+idx <- which(dimnames(tdm)$Terms == "#covid19")
+inspect(tdm[idx + (0:5), 101:110])
+```
+
+
+```{r}
+#inspect frequent words
+(freq.terms <- findFreqTerms(tdm, lowfreq=200))
+
+```
+
+
+```{r}
+term.freq <- rowSums(as.matrix(tdm))
+term.freq <- subset(term.freq, term.freq >=200)
+term.df <- data.frame(term = names(term.freq), freq = term.freq)
+```
+
+
+```{r}
+ggplot(term.df, aes(x=term, y=freq)) + geom_bar(stat = "identity") + xlab("Terms") + ylab("Count") +coord_flip()
+```
+
+
+```{r}
+plot(tdm, term = freq.terms, corThreshold = 0.12, weighting = T)
+```
+
+
+
+## 9. Word Cloud
+
+```{r}
+#setting the same seed each time ensures consistent look across clouds
+set.seed(42)
+#limit words by specifying min frequency
+wordcloud(names(words_frequency),words_frequency, min.freq=200)
+```
+
+```{r}
+#.add color
+wordcloud(names(words_frequency),words_frequency,min.freq=150,colors=brewer.pal(6,'Dark2'))
+```
+
+```{r}
+matrix <- as.matrix(tdm)
+# calculate the frequency of words and sort it by frequency
+word.freq <- sort(rowSums(matrix), decreasing = T)
+wordcloud(words = names(word.freq), freq = word.freq, min.freq = 200, random.order = F)
+```
+
+```{r}
+# Generate a wordcloud2
+#Create a vector containing only the text
+text_words <- sort(rowSums(matrix),decreasing=TRUE) 
+text_df <- data.frame(word = names(text_words),freq=text_words)
+
+wordcloud2(data=text_df, size=1.6, color='random-dark')
+```
+
+```{r}
+# Generate another wordcloud2
+wordcloud2(data=text_df, size = 0.7, shape = 'pentagon')
+```
+
+
+## 10. Clustering
+
+```{r}
+# remove sparse terms
+tdm2 <- removeSparseTerms(tdm, sparse = 0.95)
+m2 <- as.matrix(tdm2)
+# cluster terms
+distMatrix <- dist(scale(m2))
+fit <- hclust(distMatrix, method = "ward.D")
+
+plot(fit)
+rect.hclust(fit, k = 6) # cut tree into 6 clusters 
+
+```
+
+
+```{r}
+m3 <- t(m2) # transpose the matrix to cluster documents (tweets)
+set.seed(122) # set a fixed random seed
+k <- 6 # number of clusters
+kmeansResult <- kmeans(m3, k)
+round(kmeansResult$centers, digits = 3) # cluster centers
+
+```
+
+```{r}
+library(fpc)
+# partitioning around medoids with estimation of number of clusters
+pamResult <- pamk(m3, metric="manhattan")
+
+```
+```{r}
+k <- pamResult$nc # number of clusters identified
+```
+
+```{r}
+pamResult <- pamResult$pamobject
+```
+
+```{r}
+# print cluster medoids
+for (i in 1:k) {
+    cat("cluster", i, ": ",
+        colnames(pamResult$medoids)[which(pamResult$medoids[i,]==1)], "\n")
+}
+```
+
+```{r}
+# plot clustering result
+layout(matrix(c(1, 2), 1, 2)) # set to two graphs per page
+plot(pamResult, col.p = pamResult$clustering)
+```
+
+
+##11. Sentiment Analysis
+
+###11.1 bing lexicon
+
+```{r}
+library(tidytext)
+# Tokens
+tokens <- df1 %>%  
+  unnest_tokens(word, text) %>%
+  select(word)
+
+```
+
+```{r}
+library(reshape2)
+# Positive and negative words 
+tokens %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort=TRUE) %>%
+  acast(word ~ sentiment, value.var="n", fill=0) %>%
+  comparison.cloud(colors=c("#F8766D", "#00BFC4"), max.words=200)
+
+```
+
+
+```{r}
+## Joining, by = "word"
+```
+
+
+###11.2 nrc lexicon
+```{r}
+# Sentiments and frequency associated with each word  
+sentiments <- tokens %>% 
+  inner_join(get_sentiments("nrc")) %>%
+  count(word, sentiment, sort=TRUE) 
+```
+
+```{r}
+## Joining, by = "word"
+```
+
+
+```{r}
+# Frequency of each sentiment
+ggplot(data=sentiments, aes(x=reorder(sentiment, n, sum), y=n)) + 
+geom_bar(stat="identity", aes(fill=sentiment), show.legend=FALSE) +
+labs(x="Sentiment", y="Frequency") +
+theme_bw() +
+coord_flip()
+
+```
+
+
+```{r}
+# Top 10 frequent terms for each sentiment
+sentiments %>%
+  group_by(sentiment) %>%
+  arrange(desc(n)) %>%
+  slice(1:10) %>%
+  ggplot(aes(x=reorder(word, n), y=n)) +
+  geom_col(aes(fill=sentiment), show.legend=FALSE) +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  facet_wrap(~sentiment, scales="free_y") +
+  labs(y="Frequency", x="Words") +
+  coord_flip() 
+
+```
+
+
+##12. Sentiment analysis over time
+
+```{r}
+
+df %>%  
+  unnest_tokens(word, text) %>%
+  select(word, user_created) %>%
+  inner_join(get_sentiments("nrc")) %>%
+  mutate(user_created=substr(user_created, 5, 7)) %>%
+  count(user_created, sentiment) %>%
+  ggplot(aes(x=as.numeric(as.factor(user_created)), y=as.factor(sentiment))) +
+  geom_tile(aes(fill=n),  show.legend=FALSE) +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=45, hjust=1)) +
+  labs(x="Month", y="Sentiment") +   
+  #scale_fill_gradient(low="yellow", high="red") +
+  scale_x_continuous(breaks=c(1,2,3,4),
+                     labels=c("March", "April", "May", "June")) +
+  labs(fill="Frequency")
+
+
+## Joining, by = "word"
+
+```
+
+
+###AFINN lexicon
+
+```{r}
+# get_sentiments("afinn")
+
+# Positive and negative words 
+top_positive <- tokens %>% 
+  inner_join(get_sentiments("afinn")) %>%
+  dplyr::count(word, value, sort=TRUE) %>%
+  arrange(desc(value)) %>%
+  head(n=10) %>%
+  ggplot(aes(x=reorder(word, value), y=value)) +
+  geom_bar(stat="identity", fill="#00BFC4", colour="black") +
+  theme_bw() +
+  labs(x="Positive words", y="Score") +
+  coord_flip() 
+
+## Joining, by = "word"
+
+
+```
+
+```{r}
+
+top_negative <- tokens %>% 
+  inner_join(get_sentiments("afinn")) %>%
+  dplyr::count(word, value, sort=TRUE) %>%
+  arrange(value) %>%
+  head(n=10) %>%
+  ggplot(aes(x=reorder(word, -value), y=value)) +
+  geom_bar(stat="identity", fill="#F8766D", colour="black") +
+  theme_bw() +
+  labs(x="Negative words", y="Score") +
+  coord_flip() 
+
+## Joining, by = "word"
+
+```
+
+
+```{r}
+grid.arrange(top_positive, top_negative,
+             layout_matrix=cbind(1,2))
+
+```
+
+
+```{r}
+# Contribution
+tokens %>% 
+  inner_join(get_sentiments("afinn")) %>%
+  count(word, value, sort=TRUE) %>%
+  mutate(contribution=n*value) %>%
+  arrange(desc(abs(contribution))) %>%
+  head(20) %>%
+  ggplot(aes(x=reorder(word, contribution), y=contribution, fill=n*value>0)) +
+  geom_col(show.legend = FALSE) +
+  theme_bw() +
+  xlab("Words") +
+  ylab("Sentiment value * Number of ocurrences") +
+  coord_flip()
+
+## Joining, by = "word"
+```
+
+
+## 13. Topic Modeling
+
+```{r}
+dtm <- as.DocumentTermMatrix(tdm)
+library(topicmodels)
+
+lda <- LDA(dtm, k = 8) # find 8 topics
+term <- terms(lda, 4) # first 4 terms of every topic
+term
+
+```
+
+
+```{r}
+term <- apply(term, MARGIN = 2, paste, collapse = ", ")
+
+# first topic identified for every document (tweet)
+require(data.table) #fore IDate
+## Loading required package: data.table
+```
+
+```{r}
+library(lubridate)
+df1$user_created <- mdy_hm(df1$user_created)
+df1$user_created <- as.Date(df1$user_created)
+
+
+topic <- topics(lda, 1)
+topics <- data.frame(date=as.IDate(df1$user_created), topic)
+qplot(date, ..count.., data=topics, geom="density",
+      fill=term[topic], position="stack")
+
+
+```
+
+
+## 14. Correlation
+
+```{r}
+corr <- cor(f_o$user_friends, f_o$user_followers)
+corr_caption <- paste("Correlation =", corr)  
+
+
+df %>% 
+  ggplot(aes(f_o$user_friends,f_o$user_followers)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", se = F) +
+  labs(caption = corr_caption, title = "How do favourites and retweets correlate?")
+
+```
+
+
+
+
+##14. n-gram
+
+```{r}
+
+library(igraph)
+
+tweet_bigrams <- f_o %>% 
+  unnest_tokens(bigram, text, token = "ngrams", n = 2) #re-tokenise our tweets with bigrams. 
+
+# tweet_bigrams %>% 
+#  count(bigram, sort = T)
+
+
+```
+
+```{r}
+custom_stop_words <- bind_rows(tibble(word = c("https", " t.co", "in", "the"), 
+                                      lexicon = c("custom")),
+                                      stop_words) 
+
+```
+
+```{r}
+bigrams_separated <- tweet_bigrams %>% 
+  separate(bigram, c("word_1", "word_2"), sep = " ")
+
+bigrams_filtered <- bigrams_separated %>%
+  filter(!word_1 %in% custom_stop_words$word) %>%
+  filter(!word_2 %in% custom_stop_words$word) %>% 
+  filter(!word_1 %in% c("auspol", "ausvotes")) %>% 
+  filter(!word_2 == c("ausvotes2019")) #here I'm removing the hashtags (I think these were the criteria for the twitter api search)
+
+# bigrams_filtered %>% 
+#   count(word_1, word_2 , sort = T)
+```
+
+```{r}
+set.seed(2020)
+bigram_counts <- bigrams_filtered %>% 
+  count(word_1, word_2 , sort = T)
+
+```
+
+```{r}
+bigram_graph <- bigram_counts %>% 
+  filter(n > 50) %>% 
+  graph_from_data_frame()
+
+```
+
+```{r}
+a <- grid::arrow(type = "closed", length = unit(.15, "inches"))
+```
+
+```{r}
+library(ggraph)
+
+ggraph(bigram_graph, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = "lightblue", size = 5) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+  theme_void()
+```
+
+
+
+##15. Word Association
+
+```{r}
+library(widyr)
+
+tweet_words <- f_o %>% 
+  mutate(row = row_number()) %>% 
+  unnest_tokens(word, text) %>% 
+  filter(!word %in% custom_stop_words$word) 
+  
+tweet_pairs <- tweet_words %>% 
+  pairwise_count(word, row, sort = T)
+
+```
+
+```{r}
+# tweet_pairs
+
+```
+
+```{r}
+tweet_cor <- tweet_words %>% 
+  group_by(word) %>% 
+  filter(n() > 50) %>% 
+  pairwise_cor(word, row, sort = T)
+
+tweet_cor  
+```
+
+```{r}
+
+tweet_cor %>% 
+  filter(correlation > .70) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = correlation), show.legend = FALSE) +
+  geom_node_point(color = "lightblue", size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE) +
+  theme_void()
+
+```
+
